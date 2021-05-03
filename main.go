@@ -4,43 +4,46 @@ import (
 	"fmt"
 	fuzz "github.com/google/gofuzz"
 	"k8s.io/apimachinery/pkg/api/apitesting/fuzzer"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"reflect"
-	"strconv"
-
 	metafuzzer "k8s.io/apimachinery/pkg/apis/meta/fuzzer"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	clientsetscheme "k8s.io/client-go/kubernetes/scheme"
+	"reflect"
+	"strconv"
 )
+
+/*
+
+	GenerateName string `json:"generateName,omitempty" protobuf:"bytes,2,opt,name=generateName"`
+	SelfLink string `json:"selfLink,omitempty" protobuf:"bytes,4,opt,name=selfLink"`
+	UID types.UID `json:"uid,omitempty" protobuf:"bytes,5,opt,name=uid,casttype=k8s.io/kubernetes/pkg/types.UID"`
+	ResourceVersion string `json:"resourceVersion,omitempty" protobuf:"bytes,6,opt,name=resourceVersion"`
+	Generation int64 `json:"generation,omitempty" protobuf:"varint,7,opt,name=generation"`
+	CreationTimestamp Time `json:"creationTimestamp,omitempty" protobuf:"bytes,8,opt,name=creationTimestamp"`
+	DeletionTimestamp *Time `json:"deletionTimestamp,omitempty" protobuf:"bytes,9,opt,name=deletionTimestamp"`
+	DeletionGracePeriodSeconds *int64 `json:"deletionGracePeriodSeconds,omitempty" protobuf:"varint,10,opt,name=deletionGracePeriodSeconds"`
+	OwnerReferences []OwnerReference `json:"ownerReferences,omitempty" patchStrategy:"merge" patchMergeKey:"uid" protobuf:"bytes,13,rep,name=ownerReferences"`
+	ClusterName string `json:"clusterName,omitempty" protobuf:"bytes,15,opt,name=clusterName"`
+	ManagedFields []ManagedFieldsEntry `json:"managedFields,omitempty" protobuf:"bytes,17,rep,name=managedFields"`
+*/
 
 // CRDSafeFuzzerFuncs will merge the given funcLists, overriding early funcs with later ones if there first
 // argument has the same type.
 func CRDSafeFuzzerFuncs(funcs ...fuzzer.FuzzerFuncs) fuzzer.FuzzerFuncs {
 	return fuzzer.FuzzerFuncs(func(codecs serializer.CodecFactory) []interface{} {
 		result := []interface{}{}
-		for _, f := range funcs {
-			if f != nil && !matches(f) {
-				result = append(result, f(codecs)...)
+		for _, fns := range funcs {
+			if fns == nil {
+				continue
+			}
+			for _, f := range fns(codecs) {
+				if !matches(f) {
+					result = append(result, f)
+				}
 			}
 		}
-		result = append(result, 		func(j *metav1.ObjectMeta, c fuzz.Continue) {
+		result = append(result, func(j *metav1.ObjectMeta, c fuzz.Continue) {
 			c.FuzzNoCustom(j)
-
-			j.ResourceVersion = strconv.FormatUint(c.RandUint64(), 10)
-			j.UID = types.UID(c.RandString())
-
-			var sec, nsec int64
-			c.Fuzz(&sec)
-			c.Fuzz(&nsec)
-			j.CreationTimestamp = metav1.Unix(sec, nsec).Rfc3339Copy()
-
-			if j.DeletionTimestamp != nil {
-				c.Fuzz(&sec)
-				c.Fuzz(&nsec)
-				t := metav1.Unix(sec, nsec).Rfc3339Copy()
-				j.DeletionTimestamp = &t
-			}
 
 			if len(j.Labels) == 0 {
 				j.Labels = nil
@@ -52,12 +55,21 @@ func CRDSafeFuzzerFuncs(funcs ...fuzzer.FuzzerFuncs) fuzzer.FuzzerFuncs {
 			} else {
 				delete(j.Annotations, "")
 			}
-			if len(j.OwnerReferences) == 0 {
-				j.OwnerReferences = nil
-			}
 			if len(j.Finalizers) == 0 {
 				j.Finalizers = nil
 			}
+
+			j.GenerateName = ""
+			j.SelfLink = ""
+			j.UID = ""
+			j.ResourceVersion = ""
+			j.Generation = 0
+			j.CreationTimestamp = metav1.Time{}
+			j.DeletionTimestamp = nil
+			j.DeletionGracePeriodSeconds = nil
+			j.OwnerReferences = nil
+			j.ClusterName = ""
+			j.ManagedFields = nil
 		})
 		return result
 	})
@@ -66,8 +78,7 @@ func CRDSafeFuzzerFuncs(funcs ...fuzzer.FuzzerFuncs) fuzzer.FuzzerFuncs {
 func main() {
 	scheme := clientsetscheme.Scheme
 	codecFactory := serializer.NewCodecFactory(scheme)
-	fns := metafuzzer.Funcs(codecFactory)
-
+	fns := CRDSafeFuzzerFuncs(metafuzzer.Funcs)(codecFactory)
 
 	n := 0
 	for _, fn := range fns {
@@ -145,7 +156,7 @@ func matches(f interface{}) bool {
 		}
 	}
 	{
-		inV := x.In(0)
+		inV := x.In(1)
 		if inV.Kind() != reflect.Struct {
 			return false
 		}
