@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	fuzz "github.com/google/gofuzz"
+	av1 "github.com/tamalsaha/fuzzer-demo/a/v1"
+	bv1 "github.com/tamalsaha/fuzzer-demo/b/v1"
 	"k8s.io/apimachinery/pkg/api/apitesting/fuzzer"
 	metafuzzer "k8s.io/apimachinery/pkg/apis/meta/fuzzer"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,7 +77,36 @@ func CRDSafeFuzzerFuncs(funcs ...fuzzer.FuzzerFuncs) fuzzer.FuzzerFuncs {
 	})
 }
 
-func main() {
+func main_2()  {
+	var obj *metav1.ObjectMeta
+	t := reflect.TypeOf(obj)
+	if t.Kind() == reflect.Ptr {
+		fmt.Println(t.Elem().PkgPath(), t.Elem().Name())
+	} else {
+		fmt.Println(t.String(), t.PkgPath())
+	}
+}
+
+func main()  {
+	var o1 av1.Stuff
+	var o2 bv1.Stuff
+
+	t1 := reflect.TypeOf(o1)
+	fmt.Println(t1.String(), t1.PkgPath())
+
+	t2 := reflect.TypeOf(o2)
+	fmt.Println(t2.String(), t2.PkgPath())
+
+	var obj *metav1.ObjectMeta
+	t := reflect.TypeOf(obj)
+	if t.Kind() == reflect.Ptr {
+		fmt.Println(t.Elem().PkgPath(), t.Elem().Name())
+	} else {
+		fmt.Println(t.String(), t.PkgPath())
+	}
+}
+
+func main2() {
 	scheme := clientsetscheme.Scheme
 	codecFactory := serializer.NewCodecFactory(scheme)
 	fns := CRDSafeFuzzerFuncs(metafuzzer.Funcs)(codecFactory)
